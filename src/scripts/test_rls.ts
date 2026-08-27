@@ -28,9 +28,9 @@ async function verifyRLS() {
   const allChannelsResult = await pool.query('SELECT * FROM rw_channels');
   console.log(`[Raw Query without Context] Total channels seen: ${allChannelsResult.rowCount}`);
   if (allChannelsResult.rowCount === 0) {
-    console.log('✅ RLS Success: Raw query without context is blocked from reading channels.');
+    console.log('[OK] RLS Success: Raw query without context is blocked from reading channels.');
   } else {
-    console.error('❌ RLS Failure: Raw query without context was able to read channels!');
+    console.error('[ERROR] RLS Failure: Raw query without context was able to read channels!');
   }
 
   // 2. Consulta con contexto administrativo / bypass
@@ -52,9 +52,9 @@ async function verifyRLS() {
     // Validamos que 'desarrollo-interno' (canal privado) no sea visible
     const hasPrivateChannel = channels.some(c => c.rw_id === 'channel_02');
     if (hasPrivateChannel) {
-      console.error('❌ RLS Failure: user_02 was able to view private channel_02 without being a member!');
+      console.error('[ERROR] RLS Failure: user_02 was able to view private channel_02 without being a member!');
     } else {
-      console.log('✅ RLS Success: Private channel_02 is hidden from non-member user_02.');
+      console.log('[OK] RLS Success: Private channel_02 is hidden from non-member user_02.');
     }
   });
 
@@ -70,11 +70,11 @@ async function verifyRLS() {
         rw_is_edited: false,
         rw_is_deleted: false,
       });
-      console.log('✅ RLS Success: user_02 successfully posted a message to channel_01.');
+      console.log('[OK] RLS Success: user_02 successfully posted a message to channel_01.');
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error('❌ RLS Failure: user_02 could not post message to channel_01:', message);
+    console.error('[ERROR] RLS Failure: user_02 could not post message to channel_01:', message);
   }
 
   // 5. Envío de mensaje en un canal no permitido (desarrollo-interno / channel_02)
@@ -89,17 +89,17 @@ async function verifyRLS() {
         rw_is_edited: false,
         rw_is_deleted: false,
       });
-      console.error('❌ RLS Failure: user_02 successfully posted a message to a channel they are not a member of!');
+      console.error('[ERROR] RLS Failure: user_02 successfully posted a message to a channel they are not a member of!');
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    console.log('✅ RLS Success: user_02 was blocked from posting to channel_02. Error message:', message);
+    console.log('[OK] RLS Success: user_02 was blocked from posting to channel_02. Error message:', message);
   }
 
   // Limpiar registros de prueba
   await withAdminContext(async (client) => {
     await client.query("DELETE FROM rw_messages WHERE rw_id LIKE 'test_%'");
-    console.log('🧹 Cleaned up verification database records.');
+    console.log('[CLEANUP] Cleaned up verification database records.');
   });
 
   await pool.end();

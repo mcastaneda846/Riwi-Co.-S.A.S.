@@ -128,7 +128,7 @@ export const MainShell: React.FC = () => {
                   <span className="truncate"># {chan.rw_name}</span>
                   {chan.rw_is_private && (
                     <span className="text-[10px] bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded font-semibold ml-2">
-                      🔒 RLS
+                      [RLS]
                     </span>
                   )}
                 </button>
@@ -216,7 +216,7 @@ export const MainShell: React.FC = () => {
                 disabled={isLoading}
                 className="text-xs text-purple-primary hover:text-purple-light bg-purple-primary/5 hover:bg-purple-primary/10 border border-purple-primary/20 px-4 py-2 rounded-xl font-bold transition disabled:opacity-50 cursor-pointer shadow-sm"
               >
-                {isLoading ? 'Cargando...' : '↑ Cargar mensajes anteriores'}
+                {isLoading ? 'Cargando...' : 'Cargar mensajes anteriores'}
               </button>
             </div>
           )}
@@ -313,7 +313,6 @@ export const MainShell: React.FC = () => {
         <div className="flex-1 flex flex-col overflow-y-auto space-y-4">
           <div className="border-b border-gray-light pb-4">
             <h3 className="font-bold text-purple-primary text-base flex items-center space-x-2">
-              <span>🤖</span>
               <span>{t('copilotTitle')}</span>
             </h3>
             <p className="text-xs text-gray-medium mt-1">
@@ -335,7 +334,7 @@ export const MainShell: React.FC = () => {
                 {/* Badge de Seguridad si no está autorizado */}
                 {!item.isAuthorized && (
                   <div className="text-[9px] bg-red-500/10 text-red-500 px-2 py-1 rounded font-bold uppercase tracking-wider flex items-center space-x-1.5 border border-red-500/20">
-                    <span>⚠️</span>
+                    <span>[!]</span>
                     <span>Acceso Restringido (RLS)</span>
                   </div>
                 )}

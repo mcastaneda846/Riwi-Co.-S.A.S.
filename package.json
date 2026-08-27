@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed": "npx ts-node src/scripts/load_seed.ts",
+    "test:security": "npx ts-node tests/security.test.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -76,10 +76,10 @@ async function runSeed() {
     }
 
     await client.query('COMMIT');
-    console.log('✅ Base de datos poblada exitosamente con seed.json de forma idempotente.');
+    console.log('[OK] Base de datos poblada exitosamente con seed.json de forma idempotente.');
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('❌ Error al cargar seed:', error);
+    console.error('[ERROR] Error al cargar seed:', error);
     process.exit(1);
   } finally {
     client.release();

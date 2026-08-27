@@ -33,7 +33,7 @@ async function runSecurityTests() {
     `, [mockVector, msgId]);
 
     await client.query('COMMIT');
-    console.log('✓ Datos confidenciales preparados en channel_02.');
+    console.log('[OK] Datos confidenciales preparados en channel_02.');
 
     // =========================================================================
     // TEST 1: Un usuario Coder (user_02) no puede leer mensajes de channel_02
@@ -49,9 +49,9 @@ async function runSecurityTests() {
     
     console.log(`Mensajes recuperados por user_02 en channel_02: ${test1Res.rows.length}`);
     if (test1Res.rows.length === 0) {
-      console.log('✅ TEST 1 PASSED: El usuario Coder (user_02) recibió 0 resultados del canal privado (Aislado por RLS).');
+      console.log('[PASSED] TEST 1: El usuario Coder (user_02) recibió 0 resultados del canal privado (Aislado por RLS).');
     } else {
-      throw new Error('❌ TEST 1 FAILED: El usuario Coder pudo leer mensajes de un canal privado ajeno.');
+      throw new Error('[FAILED] TEST 1: El usuario Coder pudo leer mensajes de un canal privado ajeno.');
     }
 
     // =========================================================================
@@ -70,9 +70,9 @@ async function runSecurityTests() {
     console.log(`Mensajes devueltos por búsqueda vectorial para user_02: ${test2Res.rows.length}`);
     
     if (!confidentialFound) {
-      console.log('✅ TEST 2 PASSED: La búsqueda vectorial para el Coder no devolvió ningún mensaje privado/confidencial de channel_02 (Aislado por RLS).');
+      console.log('[PASSED] TEST 2: La búsqueda vectorial para el Coder no devolvió ningún mensaje privado/confidencial de channel_02 (Aislado por RLS).');
     } else {
-      throw new Error('❌ TEST 2 FAILED: La búsqueda vectorial expuso mensajes privados confidenciales al usuario Coder.');
+      throw new Error('[FAILED] TEST 2: La búsqueda vectorial expuso mensajes privados confidenciales al usuario Coder.');
     }
 
     // =========================================================================
@@ -87,15 +87,15 @@ async function runSecurityTests() {
     `);
     console.log(`Mensajes recuperados por el Admin (user_01) en channel_02: ${test3Res.rows.length}`);
     if (test3Res.rows.length > 0) {
-      console.log('✅ TEST 3 PASSED: El administrador (user_01) accedió correctamente al canal privado del cual es miembro.');
+      console.log('[PASSED] TEST 3: El administrador (user_01) accedió correctamente al canal privado del cual es miembro.');
     } else {
-      throw new Error('❌ TEST 3 FAILED: El administrador no pudo acceder a su propio canal privado.');
+      throw new Error('[FAILED] TEST 3: El administrador no pudo acceder a su propio canal privado.');
     }
 
     console.log('\n--- TODOS LOS TESTS DE SEGURIDAD PASARON EXITOSAMENTE ---');
 
   } catch (error) {
-    console.error('\n❌ ERROR EN PRUEBAS DE SEGURIDAD:', error);
+    console.error('\n[ERROR] ERROR EN PRUEBAS DE SEGURIDAD:', error);
     process.exit(1);
   } finally {
     client.release();
