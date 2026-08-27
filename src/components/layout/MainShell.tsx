@@ -34,6 +34,10 @@ export const MainShell: React.FC = () => {
   const [copilotInput, setCopilotInput] = useState('');
   const [isCopilotLoading, setIsCopilotLoading] = useState(false);
   const [localSearchText, setLocalSearchText] = useState('');
+  
+  // States for responsive mobile drawers
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isMobileCopilotOpen, setIsMobileCopilotOpen] = useState(false);
 
   const handleSendMessage = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -93,10 +97,17 @@ export const MainShell: React.FC = () => {
 
   return (
     <div className="flex h-screen w-full bg-gray-very-light text-text-dark overflow-hidden font-sans">
-      {/* ========================================================================= */}
-      {/* Zona 1: Sidebar (Izquierda) */}
-      {/* ========================================================================= */}
-      <aside className="w-72 bg-navy-blue text-white flex flex-col justify-between border-r border-navy-blue">
+      {/* Backdrop for mobile sidebar */}
+      {isMobileSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
+
+      <aside className={`w-72 bg-navy-blue text-white flex flex-col justify-between border-r border-navy-blue fixed lg:static inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out ${
+        isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      }`}>
         <div className="p-5 flex-1 flex flex-col overflow-y-auto">
           {/* Header & Lang Selector */}
           <div className="flex items-center justify-between mb-8">
@@ -118,7 +129,10 @@ export const MainShell: React.FC = () => {
               {channels.map((chan) => (
                 <button
                   key={chan.rw_id}
-                  onClick={() => setActiveChannelId(chan.rw_id)}
+                  onClick={() => {
+                    setActiveChannelId(chan.rw_id);
+                    setIsMobileSidebarOpen(false);
+                  }}
                   className={`w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 cursor-pointer flex items-center justify-between ${
                     activeChannelId === chan.rw_id
                       ? 'bg-purple-primary text-white shadow-md'
@@ -165,27 +179,61 @@ export const MainShell: React.FC = () => {
       {/* ========================================================================= */}
       {/* Zona 2: Chat Principal (Centro) */}
       {/* ========================================================================= */}
-      <main className="flex-1 flex flex-col justify-between bg-gray-very-light">
+      <main className="flex-1 flex flex-col justify-between bg-gray-very-light min-w-0">
         {/* Cabecera con Buscador */}
-        <header className="px-6 py-4 border-b border-gray-light bg-white flex items-center justify-between shadow-sm">
-          <div className="min-w-0">
-            <h2 className="font-bold text-lg text-text-dark truncate">
-              # {activeChannel ? activeChannel.rw_name : 'canal'}
-            </h2>
-            <p className="text-xs text-gray-medium">
-              {activeChannel?.rw_is_private ? 'Canal Privado' : 'Canal Público'} • RLS Activo
-            </p>
+        <header className="px-4 py-3 sm:px-6 sm:py-4 border-b border-gray-light bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center justify-between sm:justify-start w-full sm:w-auto min-w-0">
+            <div className="flex items-center min-w-0">
+              {/* Botón menú mobile */}
+              <button
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="lg:hidden mr-2 p-1.5 rounded-lg hover:bg-gray-light text-text-dark focus:outline-none cursor-pointer"
+                aria-label="Open sidebar"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+
+              <div className="min-w-0">
+                <h2 className="font-bold text-base sm:text-lg text-text-dark truncate">
+                  # {activeChannel ? activeChannel.rw_name : 'canal'}
+                </h2>
+                <p className="text-[10px] sm:text-xs text-gray-medium">
+                  {activeChannel?.rw_is_private ? 'Canal Privado' : 'Canal Público'} • RLS
+                </p>
+              </div>
+            </div>
+
+            {/* Botón mobile copilot */}
+            <button
+              onClick={() => setIsMobileCopilotOpen(true)}
+              className="lg:hidden p-1 rounded-lg hover:bg-gray-light text-purple-primary focus:outline-none cursor-pointer ml-2"
+              aria-label="Open copilot"
+            >
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="3.5" r="1.5" fill="currentColor" />
+                <rect x="11.2" y="5" width="1.6" height="2" fill="currentColor" />
+                <rect x="1.5" y="10" width="1.8" height="5" rx="0.9" fill="currentColor" />
+                <rect x="20.7" y="10" width="1.8" height="5" rx="0.9" fill="currentColor" />
+                <rect x="3" y="7" width="18" height="11" rx="4.5" fill="currentColor" />
+                <path d="M9 17.5l2.5 3v-3h-2.5z" fill="currentColor" />
+                <circle cx="8" cy="11.5" r="1.8" fill="white" />
+                <circle cx="16" cy="11.5" r="1.8" fill="white" />
+                <path d="M10 14a2 2 0 004 0" stroke="white" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+            </button>
           </div>
 
           {/* Buscador de Mensajes */}
-          <form onSubmit={handleSearchSubmit} className="flex items-center space-x-2">
-            <div className="relative">
+          <form onSubmit={handleSearchSubmit} className="flex items-center space-x-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:flex-initial">
               <input
                 type="text"
                 placeholder={t('search')}
                 value={localSearchText}
                 onChange={(e) => setLocalSearchText(e.target.value)}
-                className="w-60 bg-gray-very-light border border-gray-light rounded-xl px-4 py-2 text-xs text-text-dark placeholder-gray-medium focus:outline-none focus:border-purple-primary transition-all"
+                className="w-full sm:w-44 md:w-60 bg-gray-very-light border border-gray-light rounded-xl px-4 py-2 text-xs text-text-dark placeholder-gray-medium focus:outline-none focus:border-purple-primary transition-all"
               />
               {isSearchActive && (
                 <button
@@ -306,18 +354,40 @@ export const MainShell: React.FC = () => {
         </div>
       </main>
 
+      {/* Backdrop for mobile copilot panel */}
+      {isMobileCopilotOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setIsMobileCopilotOpen(false)}
+        />
+      )}
+
       {/* ========================================================================= */}
       {/* Zona 3: Panel Copiloto (Derecha) */}
       {/* ========================================================================= */}
-      <aside className="w-80 border-l border-gray-light p-5 flex flex-col justify-between bg-white overflow-hidden shadow-xl">
+      <aside className={`w-80 border-l border-gray-light p-5 flex flex-col justify-between bg-white overflow-hidden shadow-xl fixed lg:static inset-y-0 right-0 z-50 transform transition-transform duration-300 ease-in-out ${
+        isMobileCopilotOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'
+      }`}>
         <div className="flex-1 flex flex-col overflow-y-auto space-y-4">
-          <div className="border-b border-gray-light pb-4">
-            <h3 className="font-bold text-purple-primary text-base flex items-center space-x-2">
-              <span>{t('copilotTitle')}</span>
-            </h3>
-            <p className="text-xs text-gray-medium mt-1">
-              Búsqueda Vectorial RAG aislada por RLS.
-            </p>
+          <div className="border-b border-gray-light pb-4 flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-purple-primary text-base flex items-center space-x-2">
+                <span>{t('copilotTitle')}</span>
+              </h3>
+              <p className="text-xs text-gray-medium mt-1">
+                Búsqueda Vectorial RAG aislada por RLS.
+              </p>
+            </div>
+            {/* Close button for mobile copilot view */}
+            <button
+              onClick={() => setIsMobileCopilotOpen(false)}
+              className="lg:hidden p-1.5 rounded-lg hover:bg-gray-light text-gray-medium focus:outline-none cursor-pointer"
+              aria-label="Close copilot"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
 
           {/* Historial RAG */}
