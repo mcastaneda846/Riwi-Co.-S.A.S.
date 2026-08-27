@@ -109,7 +109,38 @@ export class CopilotRagUseCase {
           .replace('{{userRole}}', userRole)
           .replace('{{contextString}}', contextString);
 
-        if (this.openai) {
+        let answerGenerated = false;
+
+        // 4. Query Gemini LLM if RIWI_API_KEY is configured
+        const geminiApiKey = process.env.RIWI_API_KEY;
+        if (geminiApiKey) {
+          try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: queryText }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: { temperature: 0.2 }
+              })
+            });
+
+            if (response.ok) {
+              const resJson = await response.json();
+              answer = resJson.candidates?.[0]?.content?.parts?.[0]?.text || '';
+              answerGenerated = true;
+            } else {
+              const errBody = await response.text();
+              console.error('Gemini API call failed:', response.status, errBody);
+            }
+          } catch (e) {
+            console.error('Failed to call Gemini API:', e);
+          }
+        }
+
+        // 5. Query OpenAI LLM if OpenAI is configured and Gemini wasn't used/failed
+        if (!answerGenerated && this.openai) {
           const chatRes = await this.openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
@@ -120,8 +151,11 @@ export class CopilotRagUseCase {
           });
 
           answer = chatRes.choices[0].message.content || '';
-        } else {
-          // 4. Mock response generation for offline testing
+          answerGenerated = true;
+        }
+
+        // 6. Mock response generation for offline testing if no LLM responded
+        if (!answerGenerated) {
           const matchingContexts = contexts.slice(0, 3);
           answer = `Hola ${userFullName} (${userRole}). De acuerdo con los mensajes recuperados de tus canales autorizados, la consulta sobre "${queryText}" menciona lo siguiente:\n\n`;
           matchingContexts.forEach(c => {
