@@ -55,7 +55,7 @@ function MainAppContent() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 className="w-full bg-gray-very-light border border-gray-light rounded-xl px-4 py-3 text-sm text-text-dark focus:outline-none focus:border-purple-primary transition-all"
-                placeholder="correo@riwi.com"
+                placeholder="correo@riwi.commm"
               />
             </div>
 
