@@ -1,0 +1,75 @@
+{
+  "users": [
+    {
+      "rw_id": "user_01",
+      "rw_email": "admin@riwi.com",
+      "rw_password_hash": "$2y$10$8k0bVv7/F6aFhQx2VvT4OeaP7w5zGep.H9vU6HkR1J4G.V3mYnC9u",
+      "rw_full_name": "Administrador Riwi",
+      "rw_role": "admin",
+      "rw_is_active": true,
+      "rw_created_at": "2026-08-27T08:00:00Z"
+    },
+    {
+      "rw_id": "user_02",
+      "rw_email": "developer@riwi.com",
+      "rw_password_hash": "$2y$10$8k0bVv7/F6aFhQx2VvT4OeaP7w5zGep.H9vU6HkR1J4G.V3mYnC9u",
+      "rw_full_name": "Developer Riwi",
+      "rw_role": "user",
+      "rw_is_active": true,
+      "rw_created_at": "2026-08-27T08:05:00Z"
+    }
+  ],
+  "channels": [
+    {
+      "rw_id": "channel_01",
+      "rw_name": "general",
+      "rw_is_private": false,
+      "rw_created_by": "user_01",
+      "rw_created_at": "2026-08-27T08:10:00Z"
+    },
+    {
+      "rw_id": "channel_02",
+      "rw_name": "desarrollo-interno",
+      "rw_is_private": true,
+      "rw_created_by": "user_01",
+      "rw_created_at": "2026-08-27T08:15:00Z"
+    }
+  ],
+  "channel_members": [
+    {
+      "rw_channel_id": "channel_01",
+      "rw_user_id": "user_01",
+      "rw_joined_at": "2026-08-27T08:10:00Z"
+    },
+    {
+      "rw_channel_id": "channel_01",
+      "rw_user_id": "user_02",
+      "rw_joined_at": "2026-08-27T08:12:00Z"
+    },
+    {
+      "rw_channel_id": "channel_02",
+      "rw_user_id": "user_01",
+      "rw_joined_at": "2026-08-27T08:15:00Z"
+    }
+  ],
+  "messages": [
+    {
+      "rw_id": "msg_01",
+      "rw_channel_id": "channel_01",
+      "rw_user_id": "user_01",
+      "rw_content": "Hola a todos, bienvenidos al canal general de Riwi Co. S.A.S.",
+      "rw_is_edited": false,
+      "rw_is_deleted": false,
+      "rw_created_at": "2026-08-27T08:20:00Z"
+    },
+    {
+      "rw_id": "msg_02",
+      "rw_channel_id": "channel_01",
+      "rw_user_id": "user_02",
+      "rw_content": "¡Hola! Gracias, listo para comenzar a desarrollar.",
+      "rw_is_edited": false,
+      "rw_is_deleted": false,
+      "rw_created_at": "2026-08-27T08:21:00Z"
+    }
+  ]
+}

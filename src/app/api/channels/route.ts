@@ -1,20 +1,14 @@
 import { NextResponse } from 'next/server';
-import { CopilotRagUseCase } from '@/core/use-cases/CopilotRagUseCase';
-import { z } from 'zod';
+import { withUserContext } from '@/infrastructure/database/postgres';
 import jwt from 'jsonwebtoken';
 
 interface DecodedToken {
   userId: string;
-  fullName: string;
-  role: string;
   email: string;
+  role: string;
 }
 
-const copilotSchema = z.object({
-  query: z.string().min(1)
-});
-
-export async function POST(req: Request) {
+export async function GET(req: Request) {
   const correlationId = req.headers.get('x-correlation-id') || `corr-${Date.now()}`;
   const authHeader = req.headers.get('authorization');
 
@@ -39,32 +33,26 @@ export async function POST(req: Request) {
     );
   }
 
+  const userId = decoded.userId;
+
   try {
-    const body = await req.json();
-    const parsed = copilotSchema.safeParse(body);
-
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Query parameters are invalid', details: parsed.error.format() },
-        { status: 400, headers: { 'x-correlation-id': correlationId } }
-      );
-    }
-
-    const copilotUseCase = new CopilotRagUseCase();
-    const result = await copilotUseCase.execute(
-      decoded.userId,
-      decoded.fullName || 'User',
-      decoded.role || 'user',
-      decoded.email || '',
-      parsed.data.query
-    );
+    const channels = await withUserContext(userId, async (client) => {
+      const { rows } = await client.query('SELECT * FROM rw_view_user_conversations ORDER BY rw_name ASC');
+      return rows.map(r => ({
+        rw_id: r.rw_id,
+        rw_name: r.rw_name,
+        rw_is_private: r.rw_is_private,
+        rw_created_by: r.rw_created_by,
+        rw_created_at: r.rw_created_at
+      }));
+    });
 
     return NextResponse.json(
-      result,
+      channels,
       { status: 200, headers: { 'x-correlation-id': correlationId } }
     );
   } catch (error) {
-    console.error(`[${correlationId}] Copilot POST error:`, error);
+    console.error(`[${correlationId}] Channels GET error:`, error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500, headers: { 'x-correlation-id': correlationId } }

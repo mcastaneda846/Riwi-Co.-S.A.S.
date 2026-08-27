@@ -1,20 +1,17 @@
 import { NextResponse } from 'next/server';
-import { CopilotRagUseCase } from '@/core/use-cases/CopilotRagUseCase';
+import { SearchMessagesUseCase } from '@/core/use-cases/SearchMessagesUseCase';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
 
 interface DecodedToken {
   userId: string;
-  fullName: string;
-  role: string;
-  email: string;
 }
 
-const copilotSchema = z.object({
-  query: z.string().min(1)
+const searchSchema = z.object({
+  q: z.string().min(1)
 });
 
-export async function POST(req: Request) {
+export async function GET(req: Request) {
   const correlationId = req.headers.get('x-correlation-id') || `corr-${Date.now()}`;
   const authHeader = req.headers.get('authorization');
 
@@ -39,32 +36,26 @@ export async function POST(req: Request) {
     );
   }
 
-  try {
-    const body = await req.json();
-    const parsed = copilotSchema.safeParse(body);
+  const { searchParams } = new URL(req.url);
+  const parsed = searchSchema.safeParse({ q: searchParams.get('q') });
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Query parameters are invalid', details: parsed.error.format() },
-        { status: 400, headers: { 'x-correlation-id': correlationId } }
-      );
-    }
-
-    const copilotUseCase = new CopilotRagUseCase();
-    const result = await copilotUseCase.execute(
-      decoded.userId,
-      decoded.fullName || 'User',
-      decoded.role || 'user',
-      decoded.email || '',
-      parsed.data.query
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Search query q is required' },
+      { status: 400, headers: { 'x-correlation-id': correlationId } }
     );
+  }
+
+  try {
+    const searchUseCase = new SearchMessagesUseCase();
+    const results = await searchUseCase.execute(decoded.userId, parsed.data.q);
 
     return NextResponse.json(
-      result,
+      results,
       { status: 200, headers: { 'x-correlation-id': correlationId } }
     );
   } catch (error) {
-    console.error(`[${correlationId}] Copilot POST error:`, error);
+    console.error(`[${correlationId}] Search GET error:`, error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500, headers: { 'x-correlation-id': correlationId } }

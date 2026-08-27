@@ -1,0 +1,497 @@
+-- Habilitar extensión de vectores si no existe
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Crear el rol rw_admin como NO superusuario para que apliquen las políticas de RLS
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'rw_admin') THEN
+    CREATE ROLE rw_admin WITH LOGIN PASSWORD 'rw_secure_password_2026';
+  END IF;
+END
+$$;
+
+-- Otorgar permisos sobre la base de datos y el esquema público
+GRANT CONNECT ON DATABASE bd_riwi_chat_clan TO rw_admin;
+GRANT ALL PRIVILEGES ON SCHEMA public TO rw_admin;
+
+-- Tabla de Usuarios
+CREATE TABLE IF NOT EXISTS rw_users (
+  rw_id VARCHAR(255) PRIMARY KEY,
+  rw_email VARCHAR(255) UNIQUE NOT NULL,
+  rw_password_hash VARCHAR(255) NOT NULL,
+  rw_full_name VARCHAR(255) NOT NULL,
+  rw_role VARCHAR(50) NOT NULL DEFAULT 'user',
+  rw_is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  rw_created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabla de Canales
+CREATE TABLE IF NOT EXISTS rw_channels (
+  rw_id VARCHAR(255) PRIMARY KEY,
+  rw_name VARCHAR(255) NOT NULL,
+  rw_is_private BOOLEAN NOT NULL DEFAULT FALSE,
+  rw_created_by VARCHAR(255) REFERENCES rw_users(rw_id) ON DELETE SET NULL,
+  rw_created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabla de Miembros del Canal
+CREATE TABLE IF NOT EXISTS rw_channel_members (
+  rw_channel_id VARCHAR(255) REFERENCES rw_channels(rw_id) ON DELETE CASCADE,
+  rw_user_id VARCHAR(255) REFERENCES rw_users(rw_id) ON DELETE CASCADE,
+  rw_joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (rw_channel_id, rw_user_id)
+);
+
+-- Tabla de Mensajes
+CREATE TABLE IF NOT EXISTS rw_messages (
+  rw_id VARCHAR(255) PRIMARY KEY,
+  rw_channel_id VARCHAR(255) REFERENCES rw_channels(rw_id) ON DELETE CASCADE,
+  rw_user_id VARCHAR(255) REFERENCES rw_users(rw_id) ON DELETE CASCADE,
+  rw_content TEXT NOT NULL,
+  rw_is_edited BOOLEAN NOT NULL DEFAULT FALSE,
+  rw_is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+  rw_created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  rw_embedding vector(1536)
+);
+
+-- Función SECURITY DEFINER para verificar membresía de canal sin recursión infinita en las políticas RLS
+CREATE OR REPLACE FUNCTION public.is_member_of_channel(channel_id VARCHAR, user_id VARCHAR)
+RETURNS BOOLEAN SECURITY DEFINER AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.rw_channel_members 
+    WHERE rw_channel_id = $1 AND rw_user_id = $2
+  );
+END;
+$$ LANGUAGE plpgsql;
+
+-- Otorgar permisos sobre tablas, secuencias y funciones a rw_admin
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO rw_admin;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO rw_admin;
+GRANT EXECUTE ON FUNCTION public.is_member_of_channel(VARCHAR, VARCHAR) TO rw_admin;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO rw_admin;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO rw_admin;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO rw_admin;
+
+-- Habilitar Row Level Security (RLS) en todas las tablas y forzarlo
+ALTER TABLE rw_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rw_users FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE rw_channels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rw_channels FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE rw_channel_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rw_channel_members FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE rw_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rw_messages FORCE ROW LEVEL SECURITY;
+
+-- =========================================================================
+-- Políticas RLS para rw_users
+-- =========================================================================
+
+CREATE POLICY rw_users_select_policy ON rw_users
+  FOR SELECT
+  USING (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR (
+      current_setting('app.current_user_id', true) IS NOT NULL 
+      AND current_setting('app.current_user_id', true) <> ''
+    )
+  );
+
+CREATE POLICY rw_users_modify_policy ON rw_users
+  FOR ALL
+  USING (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR rw_id = current_setting('app.current_user_id', true)
+  )
+  WITH CHECK (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR rw_id = current_setting('app.current_user_id', true)
+  );
+
+-- =========================================================================
+-- Políticas RLS para rw_channels
+-- =========================================================================
+
+CREATE POLICY rw_channels_select_policy ON rw_channels
+  FOR SELECT
+  USING (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR (
+      (
+        rw_is_private = FALSE 
+        OR public.is_member_of_channel(rw_id, current_setting('app.current_user_id', true))
+      )
+      AND current_setting('app.current_user_id', true) IS NOT NULL 
+      AND current_setting('app.current_user_id', true) <> ''
+    )
+  );
+
+CREATE POLICY rw_channels_insert_policy ON rw_channels
+  FOR INSERT
+  WITH CHECK (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR (
+      rw_created_by = current_setting('app.current_user_id', true)
+      AND current_setting('app.current_user_id', true) IS NOT NULL 
+      AND current_setting('app.current_user_id', true) <> ''
+    )
+  );
+
+CREATE POLICY rw_channels_modify_policy ON rw_channels
+  FOR UPDATE
+  USING (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR rw_created_by = current_setting('app.current_user_id', true)
+  )
+  WITH CHECK (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR rw_created_by = current_setting('app.current_user_id', true)
+  );
+
+CREATE POLICY rw_channels_delete_policy ON rw_channels
+  FOR DELETE
+  USING (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR rw_created_by = current_setting('app.current_user_id', true)
+  );
+
+-- =========================================================================
+-- Políticas RLS para rw_channel_members
+-- =========================================================================
+
+CREATE POLICY rw_channel_members_select_policy ON rw_channel_members
+  FOR SELECT
+  USING (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR (
+      public.is_member_of_channel(rw_channel_id, current_setting('app.current_user_id', true))
+      AND current_setting('app.current_user_id', true) IS NOT NULL 
+      AND current_setting('app.current_user_id', true) <> ''
+    )
+  );
+
+CREATE POLICY rw_channel_members_insert_policy ON rw_channel_members
+  FOR INSERT
+  WITH CHECK (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR (
+      (
+        rw_user_id = current_setting('app.current_user_id', true)
+        OR public.is_member_of_channel(rw_channel_id, current_setting('app.current_user_id', true))
+      )
+      AND current_setting('app.current_user_id', true) IS NOT NULL 
+      AND current_setting('app.current_user_id', true) <> ''
+    )
+  );
+
+CREATE POLICY rw_channel_members_delete_policy ON rw_channel_members
+  FOR DELETE
+  USING (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR rw_user_id = current_setting('app.current_user_id', true)
+    OR public.is_member_of_channel(rw_channel_id, current_setting('app.current_user_id', true))
+  );
+
+-- =========================================================================
+-- Políticas RLS para rw_messages
+-- =========================================================================
+
+CREATE POLICY rw_messages_select_policy ON rw_messages
+  FOR SELECT
+  USING (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR (
+      public.is_member_of_channel(rw_channel_id, current_setting('app.current_user_id', true))
+      AND current_setting('app.current_user_id', true) IS NOT NULL 
+      AND current_setting('app.current_user_id', true) <> ''
+    )
+  );
+
+CREATE POLICY rw_messages_insert_policy ON rw_messages
+  FOR INSERT
+  WITH CHECK (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR (
+      rw_user_id = current_setting('app.current_user_id', true)
+      AND public.is_member_of_channel(rw_channel_id, current_setting('app.current_user_id', true))
+      AND current_setting('app.current_user_id', true) IS NOT NULL 
+      AND current_setting('app.current_user_id', true) <> ''
+    )
+  );
+
+CREATE POLICY rw_messages_modify_policy ON rw_messages
+  FOR UPDATE
+  USING (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR rw_user_id = current_setting('app.current_user_id', true)
+  )
+  WITH CHECK (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR rw_user_id = current_setting('app.current_user_id', true)
+  );
+
+CREATE POLICY rw_messages_delete_policy ON rw_messages
+  FOR DELETE
+  USING (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR rw_user_id = current_setting('app.current_user_id', true)
+  );
+
+-- Vista de conversaciones del usuario
+CREATE OR REPLACE VIEW rw_view_user_conversations AS
+SELECT 
+  rw_id,
+  rw_name,
+  rw_is_private,
+  rw_created_by,
+  rw_created_at
+FROM rw_channels;
+
+GRANT SELECT ON rw_view_user_conversations TO rw_admin;
+
+-- Función para búsqueda de mensajes con resaltado <mark>
+CREATE OR REPLACE FUNCTION rw_fn_search_messages(search_query TEXT)
+RETURNS TABLE (
+  rw_id VARCHAR,
+  rw_channel_id VARCHAR,
+  rw_user_id VARCHAR,
+  rw_content TEXT,
+  rw_created_at TIMESTAMP WITH TIME ZONE
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    m.rw_id,
+    m.rw_channel_id,
+    m.rw_user_id,
+    regexp_replace(m.rw_content, '(' || regexp_replace(search_query, '([!$()*+.\?\[\\\]^{|}-])', '\\\1', 'g') || ')', '<mark>\1</mark>', 'gi') AS rw_content,
+    m.rw_created_at
+  FROM rw_messages m
+  WHERE m.rw_content ILIKE '%' || search_query || '%'
+    AND m.rw_is_deleted = FALSE;
+END;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
+
+GRANT EXECUTE ON FUNCTION rw_fn_search_messages(TEXT) TO rw_admin;
+
+-- Función para búsqueda de similitud vectorial para Copilot
+CREATE OR REPLACE FUNCTION rw_fn_copilot_context_search(query_embedding vector(1536), match_threshold DOUBLE PRECISION, match_count INT)
+RETURNS TABLE (
+  rw_id VARCHAR,
+  rw_channel_id VARCHAR,
+  rw_user_id VARCHAR,
+  rw_content TEXT,
+  rw_created_at TIMESTAMP WITH TIME ZONE,
+  similarity DOUBLE PRECISION
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    m.rw_id,
+    m.rw_channel_id,
+    m.rw_user_id,
+    m.rw_content,
+    m.rw_created_at,
+    (1 - (m.rw_embedding <=> query_embedding))::DOUBLE PRECISION AS similarity
+  FROM rw_messages m
+  WHERE m.rw_is_deleted = FALSE
+    AND (1 - (m.rw_embedding <=> query_embedding)) > match_threshold
+  ORDER BY m.rw_embedding <=> query_embedding ASC
+  LIMIT match_count;
+END;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
+
+GRANT EXECUTE ON FUNCTION rw_fn_copilot_context_search(vector(1536), DOUBLE PRECISION, INT) TO rw_admin;
+
+-- =========================================================================
+-- Restricciones CHECK
+-- =========================================================================
+
+-- Restricción CHECK para correo válido (debe contener '@')
+ALTER TABLE rw_users ADD CONSTRAINT rw_chk_users_email CHECK (rw_email LIKE '%@%');
+
+-- Restricción CHECK para contenido de mensajes no vacío
+ALTER TABLE rw_messages ADD CONSTRAINT rw_chk_messages_content CHECK (length(trim(rw_content)) > 0);
+
+-- =========================================================================
+-- Índices
+-- =========================================================================
+
+-- Índice único parcial para evitar nombres de canales públicos repetidos (los privados pueden repetirse)
+CREATE UNIQUE INDEX IF NOT EXISTS rw_idx_unique_public_channel_name 
+ON rw_channels (rw_name) 
+WHERE (rw_is_private = FALSE);
+
+-- =========================================================================
+-- Procedimientos almacenados
+-- =========================================================================
+
+-- Procedimiento almacenado para consultar todos los usuarios mediante un cursor
+CREATE OR REPLACE PROCEDURE rw_sp_get_users(INOUT users_cursor refcursor)
+AS $$
+BEGIN
+  OPEN users_cursor FOR 
+    SELECT rw_id, rw_email, rw_full_name, rw_role, rw_is_active, rw_created_at 
+    FROM rw_users;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Procedimiento almacenado para la edición y eliminación lógica de usuarios
+CREATE OR REPLACE PROCEDURE rw_sp_modify_user(
+  p_user_id VARCHAR,
+  p_full_name VARCHAR,
+  p_email VARCHAR,
+  p_role VARCHAR,
+  p_is_active BOOLEAN,
+  p_action VARCHAR -- 'edit' o 'delete'
+)
+AS $$
+BEGIN
+  IF p_action = 'delete' THEN
+    UPDATE rw_users 
+    SET rw_is_active = FALSE 
+    WHERE rw_id = p_user_id;
+  ELSIF p_action = 'edit' THEN
+    UPDATE rw_users 
+    SET rw_full_name = COALESCE(p_full_name, rw_full_name),
+        rw_email = COALESCE(p_email, rw_email),
+        rw_role = COALESCE(p_role, rw_role),
+        rw_is_active = COALESCE(p_is_active, rw_is_active)
+    WHERE rw_id = p_user_id;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =========================================================================
+-- Trigger de consistencia de mensajes/embeddings
+-- =========================================================================
+
+-- Tabla de log para auditoría de sincronización de embeddings y cambios en mensajes
+CREATE TABLE IF NOT EXISTS rw_messages_sync_log (
+  rw_log_id SERIAL PRIMARY KEY,
+  rw_message_id VARCHAR(255) NOT NULL,
+  rw_action VARCHAR(50) NOT NULL,
+  rw_changed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Función del trigger para sincronización
+CREATE OR REPLACE FUNCTION rw_fn_trigger_message_sync()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Si el contenido cambia, invalidamos el embedding actual asignando NULL para marcarlo para recálculo
+  IF (TG_OP = 'UPDATE' AND OLD.rw_content <> NEW.rw_content) THEN
+    NEW.rw_embedding = NULL;
+    INSERT INTO rw_messages_sync_log (rw_message_id, rw_action)
+    VALUES (NEW.rw_id, 'CONTENT_UPDATED');
+  ELSIF (TG_OP = 'UPDATE' AND OLD.rw_is_deleted <> NEW.rw_is_deleted AND NEW.rw_is_deleted = TRUE) THEN
+    INSERT INTO rw_messages_sync_log (rw_message_id, rw_action)
+    VALUES (NEW.rw_id, 'LOGICAL_DELETED');
+  ELSIF (TG_OP = 'INSERT') THEN
+    INSERT INTO rw_messages_sync_log (rw_message_id, rw_action)
+    VALUES (NEW.rw_id, 'CREATED');
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger antes de inserción o actualización
+CREATE OR REPLACE TRIGGER rw_trg_message_sync
+BEFORE INSERT OR UPDATE ON rw_messages
+FOR EACH ROW
+EXECUTE FUNCTION rw_fn_trigger_message_sync();
+
+-- =========================================================================
+-- Consulta 4 (Consumo de IA): Tabla y Vista
+-- =========================================================================
+
+-- Tabla para registrar consumo de copiloto
+CREATE TABLE IF NOT EXISTS rw_copilot_usage (
+  rw_id SERIAL PRIMARY KEY,
+  rw_user_id VARCHAR(255) REFERENCES rw_users(rw_id) ON DELETE CASCADE,
+  rw_tokens_used INT NOT NULL DEFAULT 0,
+  rw_prompt_tokens INT NOT NULL DEFAULT 0,
+  rw_completion_tokens INT NOT NULL DEFAULT 0,
+  rw_requested_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Habilitar RLS en tabla de consumo
+ALTER TABLE rw_copilot_usage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rw_copilot_usage FORCE ROW LEVEL SECURITY;
+
+-- Políticas RLS de consumo
+CREATE POLICY rw_copilot_usage_select_policy ON rw_copilot_usage
+  FOR SELECT
+  USING (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR rw_user_id = current_setting('app.current_user_id', true)
+  );
+
+CREATE POLICY rw_copilot_usage_insert_policy ON rw_copilot_usage
+  FOR INSERT
+  WITH CHECK (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR rw_user_id = current_setting('app.current_user_id', true)
+  );
+
+-- Vista para agrupar consumo acumulado por usuario
+CREATE OR REPLACE VIEW rw_view_copilot_accumulated_consumption AS
+SELECT 
+  rw_user_id,
+  SUM(rw_tokens_used)::BIGINT as rw_total_tokens,
+  SUM(rw_prompt_tokens)::BIGINT as rw_total_prompt_tokens,
+  SUM(rw_completion_tokens)::BIGINT as rw_total_completion_tokens,
+  COUNT(rw_id)::BIGINT as rw_total_queries
+FROM rw_copilot_usage
+GROUP BY rw_user_id;
+
+-- Privilegios adicionales para el rol rw_admin
+GRANT SELECT ON rw_view_copilot_accumulated_consumption TO rw_admin;
+GRANT SELECT, INSERT ON rw_copilot_usage TO rw_admin;
+GRANT SELECT, INSERT ON rw_messages_sync_log TO rw_admin;
+GRANT USAGE, SELECT ON SEQUENCE rw_copilot_usage_rw_id_seq TO rw_admin;
+GRANT USAGE, SELECT ON SEQUENCE rw_messages_sync_log_rw_log_id_seq TO rw_admin;
+
+-- =========================================================================
+-- Datos Semilla (Seed Data)
+-- =========================================================================
+
+-- Deshabilitar triggers temporalmente para evitar logs/recálculos innecesarios durante el seed
+ALTER TABLE rw_messages DISABLE TRIGGER rw_trg_message_sync;
+
+-- Insertar usuarios semilla
+INSERT INTO rw_users (rw_id, rw_email, rw_password_hash, rw_full_name, rw_role, rw_is_active, rw_created_at)
+VALUES 
+  ('user_01', 'admin@riwi.com', '$2y$10$8k0bVv7/F6aFhQx2VvT4OeaP7w5zGep.H9vU6HkR1J4G.V3mYnC9u', 'Administrador Riwi', 'admin', TRUE, '2026-08-27 08:00:00+00'),
+  ('user_02', 'developer@riwi.com', '$2y$10$8k0bVv7/F6aFhQx2VvT4OeaP7w5zGep.H9vU6HkR1J4G.V3mYnC9u', 'Developer Riwi', 'user', TRUE, '2026-08-27 08:05:00+00')
+ON CONFLICT (rw_id) DO NOTHING;
+
+-- Insertar canales semilla
+INSERT INTO rw_channels (rw_id, rw_name, rw_is_private, rw_created_by, rw_created_at)
+VALUES 
+  ('channel_01', 'general', FALSE, 'user_01', '2026-08-27 08:10:00+00'),
+  ('channel_02', 'desarrollo-interno', TRUE, 'user_01', '2026-08-27 08:15:00+00')
+ON CONFLICT (rw_id) DO NOTHING;
+
+-- Insertar miembros de canales semilla
+INSERT INTO rw_channel_members (rw_channel_id, rw_user_id, rw_joined_at)
+VALUES 
+  ('channel_01', 'user_01', '2026-08-27 08:10:00+00'),
+  ('channel_01', 'user_02', '2026-08-27 08:12:00+00'),
+  ('channel_02', 'user_01', '2026-08-27 08:15:00+00')
+ON CONFLICT (rw_channel_id, rw_user_id) DO NOTHING;
+
+-- Insertar mensajes semilla
+INSERT INTO rw_messages (rw_id, rw_channel_id, rw_user_id, rw_content, rw_is_edited, rw_is_deleted, rw_created_at)
+VALUES 
+  ('msg_01', 'channel_01', 'user_01', 'Hola a todos, bienvenidos al canal general de Riwi Co. S.A.S.', FALSE, FALSE, '2026-08-27 08:20:00+00'),
+  ('msg_02', 'channel_01', 'user_02', '¡Hola! Gracias, listo para comenzar a desarrollar.', FALSE, FALSE, '2026-08-27 08:21:00+00')
+ON CONFLICT (rw_id) DO NOTHING;
+
+-- Reactivar triggers
+ALTER TABLE rw_messages ENABLE TRIGGER rw_trg_message_sync;
+
+
