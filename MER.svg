@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 820" width="100%" height="100%" style="background:#0f172a; font-family: ui-sans-serif, system-ui, sans-serif;">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8"/>
+    </marker>
+    <style>
+      .card { fill: #1e293b; stroke: #334155; stroke-width: 1.5; rx: 8; }
+      .card-header { fill: #0f172a; }
+      .title { fill: #38bdf8; font-size: 14px; font-weight: bold; }
+      .field { fill: #cbd5e1; font-size: 11px; }
+      .pk { fill: #eab308; font-weight: bold; font-size: 10px; }
+      .fk { fill: #a855f7; font-weight: bold; font-size: 10px; }
+      .type { fill: #64748b; font-size: 10px; }
+      .line { stroke: #38bdf8; stroke-width: 2; fill: none; stroke-dasharray: 4,4; }
+    </style>
+  </defs>
+
+  <!-- Relaciones (Lineas conectoras) -->
+  <path d="M 280 140 L 420 140" class="line" marker-end="url(#arrow)"/>
+  <path d="M 180 255 L 180 340 L 420 370" class="line" marker-end="url(#arrow)"/>
+  <path d="M 180 255 L 180 620 L 420 620" class="line" marker-end="url(#arrow)"/>
+  <path d="M 640 140 L 760 140" class="line" marker-end="url(#arrow)"/>
+  <path d="M 530 230 L 530 310" class="line" marker-end="url(#arrow)"/>
+  <path d="M 530 500 L 530 540" class="line" marker-end="url(#arrow)"/>
+  <path d="M 640 620 L 760 620" class="line" marker-end="url(#arrow)"/>
+
+  <!-- Tabla rw_users -->
+  <g transform="translate(60, 40)">
+    <rect width="220" height="215" class="card"/>
+    <path d="M 0 0 h 220 v 32 h -220 z" class="card-header"/>
+    <text x="12" y="21" class="title">rw_users</text>
+    <text x="12" y="55" class="pk">PK</text><text x="35" y="55" class="field">rw_id</text><text x="160" y="55" class="type">varchar</text>
+    <text x="12" y="80" class="pk">UQ</text><text x="35" y="80" class="field">rw_email</text><text x="160" y="80" class="type">varchar</text>
+    <text x="35" y="105" class="field">rw_password_hash</text><text x="160" y="105" class="type">varchar</text>
+    <text x="35" y="130" class="field">rw_full_name</text><text x="160" y="130" class="type">varchar</text>
+    <text x="35" y="155" class="field">rw_role</text><text x="160" y="155" class="type">varchar</text>
+    <text x="35" y="180" class="field">rw_is_active</text><text x="160" y="180" class="type">boolean</text>
+    <text x="35" y="205" class="field">rw_created_at</text><text x="145" y="205" class="type">timestamptz</text>
+  </g>
+
+  <!-- Tabla rw_channels -->
+  <g transform="translate(420, 40)">
+    <rect width="220" height="190" class="card"/>
+    <path d="M 0 0 h 220 v 32 h -220 z" class="card-header"/>
+    <text x="12" y="21" class="title">rw_channels</text>
+    <text x="12" y="55" class="pk">PK</text><text x="35" y="55" class="field">rw_id</text><text x="160" y="55" class="type">varchar</text>
+    <text x="35" y="80" class="field">rw_name</text><text x="160" y="80" class="type">varchar</text>
+    <text x="35" y="105" class="field">rw_is_private</text><text x="160" y="105" class="type">boolean</text>
+    <text x="12" y="130" class="fk">FK</text><text x="35" y="130" class="field">rw_created_by</text><text x="160" y="130" class="type">varchar</text>
+    <text x="35" y="155" class="field">rw_created_at</text><text x="145" y="155" class="type">timestamptz</text>
+  </g>
+
+  <!-- Tabla rw_channel_members -->
+  <g transform="translate(760, 40)">
+    <rect width="240" height="145" class="card"/>
+    <path d="M 0 0 h 240 v 32 h -240 z" class="card-header"/>
+    <text x="12" y="21" class="title">rw_channel_members</text>
+    <text x="12" y="55" class="pk">PK,FK</text><text x="50" y="55" class="field">rw_channel_id</text><text x="180" y="55" class="type">varchar</text>
+    <text x="12" y="80" class="pk">PK,FK</text><text x="50" y="80" class="field">rw_user_id</text><text x="180" y="80" class="type">varchar</text>
+    <text x="50" y="105" class="field">rw_joined_at</text><text x="165" y="105" class="type">timestamptz</text>
+  </g>
+
+  <!-- Tabla rw_messages -->
+  <g transform="translate(420, 310)">
+    <rect width="220" height="190" class="card"/>
+    <path d="M 0 0 h 220 v 32 h -220 z" class="card-header"/>
+    <text x="12" y="21" class="title">rw_messages</text>
+    <text x="12" y="55" class="pk">PK</text><text x="35" y="55" class="field">rw_id</text><text x="160" y="55" class="type">varchar</text>
+    <text x="12" y="80" class="fk">FK</text><text x="35" y="80" class="field">rw_channel_id</text><text x="160" y="80" class="type">varchar</text>
+    <text x="12" y="105" class="fk">FK</text><text x="35" y="105" class="field">rw_user_id</text><text x="160" y="105" class="type">varchar</text>
+    <text x="35" y="130" class="field">rw_content</text><text x="160" y="130" class="type">text</text>
+    <text x="35" y="155" class="field">rw_is_edited / deleted</text><text x="160" y="155" class="type">boolean</text>
+    <text x="35" y="180" class="field">rw_embedding</text><text x="150" y="180" class="type">vector(1536)</text>
+  </g>
+
+  <!-- Tabla rw_copilot_usage -->
+  <g transform="translate(420, 540)">
+    <rect width="220" height="190" class="card"/>
+    <path d="M 0 0 h 220 v 32 h -220 z" class="card-header"/>
+    <text x="12" y="21" class="title">rw_copilot_usage</text>
+    <text x="12" y="55" class="pk">PK</text><text x="35" y="55" class="field">rw_id</text><text x="165" y="55" class="type">int</text>
+    <text x="12" y="80" class="fk">FK</text><text x="35" y="80" class="field">rw_user_id</text><text x="165" y="80" class="type">varchar</text>
+    <text x="35" y="105" class="field">rw_tokens_used</text><text x="165" y="105" class="type">int</text>
+    <text x="35" y="130" class="field">rw_prompt_tokens</text><text x="165" y="130" class="type">int</text>
+    <text x="35" y="155" class="field">rw_completion_tokens</text><text x="165" y="155" class="type">int</text>
+    <text x="35" y="180" class="field">rw_requested_at</text><text x="145" y="180" class="type">timestamptz</text>
+  </g>
+
+  <!-- Tabla rw_messages_sync_log -->
+  <g transform="translate(760, 540)">
+    <rect width="240" height="145" class="card"/>
+    <path d="M 0 0 h 240 v 32 h -240 z" class="card-header"/>
+    <text x="12" y="21" class="title">rw_messages_sync_log</text>
+    <text x="12" y="55" class="pk">PK</text><text x="50" y="55" class="field">rw_log_id</text><text x="180" y="55" class="type">int</text>
+    <text x="50" y="80" class="field">rw_message_id</text><text x="180" y="80" class="type">varchar</text>
+    <text x="50" y="105" class="field">rw_action</text><text x="180" y="105" class="type">varchar</text>
+    <text x="50" y="130" class="field">rw_changed_at</text><text x="165" y="130" class="type">timestamptz</text>
+  </g>
+</svg>
