@@ -307,3 +307,151 @@ $$ LANGUAGE plpgsql SECURITY INVOKER;
 
 GRANT EXECUTE ON FUNCTION rw_fn_copilot_context_search(vector(1536), DOUBLE PRECISION, INT) TO rw_admin;
 
+-- =========================================================================
+-- Restricciones CHECK
+-- =========================================================================
+
+-- Restricción CHECK para correo válido (debe contener '@')
+ALTER TABLE rw_users ADD CONSTRAINT rw_chk_users_email CHECK (rw_email LIKE '%@%');
+
+-- Restricción CHECK para contenido de mensajes no vacío
+ALTER TABLE rw_messages ADD CONSTRAINT rw_chk_messages_content CHECK (length(trim(rw_content)) > 0);
+
+-- =========================================================================
+-- Índices
+-- =========================================================================
+
+-- Índice único parcial para evitar nombres de canales públicos repetidos (los privados pueden repetirse)
+CREATE UNIQUE INDEX IF NOT EXISTS rw_idx_unique_public_channel_name 
+ON rw_channels (rw_name) 
+WHERE (rw_is_private = FALSE);
+
+-- =========================================================================
+-- Procedimientos almacenados
+-- =========================================================================
+
+-- Procedimiento almacenado para consultar todos los usuarios mediante un cursor
+CREATE OR REPLACE PROCEDURE rw_sp_get_users(INOUT users_cursor refcursor)
+AS $$
+BEGIN
+  OPEN users_cursor FOR 
+    SELECT rw_id, rw_email, rw_full_name, rw_role, rw_is_active, rw_created_at 
+    FROM rw_users;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Procedimiento almacenado para la edición y eliminación lógica de usuarios
+CREATE OR REPLACE PROCEDURE rw_sp_modify_user(
+  p_user_id VARCHAR,
+  p_full_name VARCHAR,
+  p_email VARCHAR,
+  p_role VARCHAR,
+  p_is_active BOOLEAN,
+  p_action VARCHAR -- 'edit' o 'delete'
+)
+AS $$
+BEGIN
+  IF p_action = 'delete' THEN
+    UPDATE rw_users 
+    SET rw_is_active = FALSE 
+    WHERE rw_id = p_user_id;
+  ELSIF p_action = 'edit' THEN
+    UPDATE rw_users 
+    SET rw_full_name = COALESCE(p_full_name, rw_full_name),
+        rw_email = COALESCE(p_email, rw_email),
+        rw_role = COALESCE(p_role, rw_role),
+        rw_is_active = COALESCE(p_is_active, rw_is_active)
+    WHERE rw_id = p_user_id;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =========================================================================
+-- Trigger de consistencia de mensajes/embeddings
+-- =========================================================================
+
+-- Tabla de log para auditoría de sincronización de embeddings y cambios en mensajes
+CREATE TABLE IF NOT EXISTS rw_messages_sync_log (
+  rw_log_id SERIAL PRIMARY KEY,
+  rw_message_id VARCHAR(255) NOT NULL,
+  rw_action VARCHAR(50) NOT NULL,
+  rw_changed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Función del trigger para sincronización
+CREATE OR REPLACE FUNCTION rw_fn_trigger_message_sync()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Si el contenido cambia, invalidamos el embedding actual asignando NULL para marcarlo para recálculo
+  IF (TG_OP = 'UPDATE' AND OLD.rw_content <> NEW.rw_content) THEN
+    NEW.rw_embedding = NULL;
+    INSERT INTO rw_messages_sync_log (rw_message_id, rw_action)
+    VALUES (NEW.rw_id, 'CONTENT_UPDATED');
+  ELSIF (TG_OP = 'UPDATE' AND OLD.rw_is_deleted <> NEW.rw_is_deleted AND NEW.rw_is_deleted = TRUE) THEN
+    INSERT INTO rw_messages_sync_log (rw_message_id, rw_action)
+    VALUES (NEW.rw_id, 'LOGICAL_DELETED');
+  ELSIF (TG_OP = 'INSERT') THEN
+    INSERT INTO rw_messages_sync_log (rw_message_id, rw_action)
+    VALUES (NEW.rw_id, 'CREATED');
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger antes de inserción o actualización
+CREATE OR REPLACE TRIGGER rw_trg_message_sync
+BEFORE INSERT OR UPDATE ON rw_messages
+FOR EACH ROW
+EXECUTE FUNCTION rw_fn_trigger_message_sync();
+
+-- =========================================================================
+-- Consulta 4 (Consumo de IA): Tabla y Vista
+-- =========================================================================
+
+-- Tabla para registrar consumo de copiloto
+CREATE TABLE IF NOT EXISTS rw_copilot_usage (
+  rw_id SERIAL PRIMARY KEY,
+  rw_user_id VARCHAR(255) REFERENCES rw_users(rw_id) ON DELETE CASCADE,
+  rw_tokens_used INT NOT NULL DEFAULT 0,
+  rw_prompt_tokens INT NOT NULL DEFAULT 0,
+  rw_completion_tokens INT NOT NULL DEFAULT 0,
+  rw_requested_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Habilitar RLS en tabla de consumo
+ALTER TABLE rw_copilot_usage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rw_copilot_usage FORCE ROW LEVEL SECURITY;
+
+-- Políticas RLS de consumo
+CREATE POLICY rw_copilot_usage_select_policy ON rw_copilot_usage
+  FOR SELECT
+  USING (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR rw_user_id = current_setting('app.current_user_id', true)
+  );
+
+CREATE POLICY rw_copilot_usage_insert_policy ON rw_copilot_usage
+  FOR INSERT
+  WITH CHECK (
+    current_setting('app.bypass_rls', true) = 'true'
+    OR rw_user_id = current_setting('app.current_user_id', true)
+  );
+
+-- Vista para agrupar consumo acumulado por usuario
+CREATE OR REPLACE VIEW rw_view_copilot_accumulated_consumption AS
+SELECT 
+  rw_user_id,
+  SUM(rw_tokens_used)::BIGINT as rw_total_tokens,
+  SUM(rw_prompt_tokens)::BIGINT as rw_total_prompt_tokens,
+  SUM(rw_completion_tokens)::BIGINT as rw_total_completion_tokens,
+  COUNT(rw_id)::BIGINT as rw_total_queries
+FROM rw_copilot_usage
+GROUP BY rw_user_id;
+
+-- Privilegios adicionales para el rol rw_admin
+GRANT SELECT ON rw_view_copilot_accumulated_consumption TO rw_admin;
+GRANT SELECT, INSERT ON rw_copilot_usage TO rw_admin;
+GRANT SELECT, INSERT ON rw_messages_sync_log TO rw_admin;
+GRANT USAGE, SELECT ON SEQUENCE rw_copilot_usage_rw_id_seq TO rw_admin;
+GRANT USAGE, SELECT ON SEQUENCE rw_messages_sync_log_rw_log_id_seq TO rw_admin;
+

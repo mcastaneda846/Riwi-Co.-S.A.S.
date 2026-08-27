@@ -1,6 +1,15 @@
 import { withUserContext } from '../../infrastructure/database/postgres';
 import { Message } from '../domain/Message';
 
+interface MessageDbRow {
+  rw_id: string;
+  rw_channel_id: string;
+  rw_user_id: string;
+  rw_content: string;
+  rw_created_at: string | Date;
+  author_name?: string;
+}
+
 export class SearchMessagesUseCase {
   async execute(
     userId: string,
@@ -14,7 +23,7 @@ export class SearchMessagesUseCase {
       `;
       const { rows } = await client.query(query, [searchQuery]);
 
-      return rows.map((m: any) => ({
+      return (rows as MessageDbRow[]).map((m) => ({
         rw_id: m.rw_id,
         rw_channel_id: m.rw_channel_id,
         rw_user_id: m.rw_user_id,

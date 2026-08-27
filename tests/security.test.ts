@@ -66,7 +66,7 @@ async function runSecurityTests() {
       ) c, rw_fn_copilot_context_search($1::vector, 0.0, 10)
     `, [mockVector]);
 
-    const confidentialFound = test2Res.rows.some((row: any) => row.rw_id === msgId);
+    const confidentialFound = test2Res.rows.some((row: { rw_id: string }) => row.rw_id === msgId);
     console.log(`Mensajes devueltos por búsqueda vectorial para user_02: ${test2Res.rows.length}`);
     
     if (!confidentialFound) {

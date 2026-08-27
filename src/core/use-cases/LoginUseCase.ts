@@ -26,7 +26,7 @@ export class LoginUseCase {
     let isMatch = false;
     try {
       isMatch = bcrypt.compareSync(password, normalizedHash);
-    } catch (e) {
+    } catch {
       // Normal comparison fails if hash is malformed
     }
 

@@ -29,7 +29,7 @@ export async function GET(req: Request) {
       token,
       process.env.JWT_SECRET || 'super_secret_jwt_token_clan_riwi_2026'
     ) as DecodedToken;
-  } catch (e) {
+  } catch {
     return NextResponse.json(
       { error: 'Invalid token' },
       { status: 401, headers: { 'x-correlation-id': correlationId } }

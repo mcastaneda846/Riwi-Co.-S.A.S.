@@ -1,6 +1,19 @@
 import { withUserContext } from '../../infrastructure/database/postgres';
 import { CopilotQueryResult, CopilotContext } from '../domain/CopilotContext';
 import OpenAI from 'openai';
+import prompts from '../../config/prompts.json';
+
+interface CopilotDbRow {
+  rw_id?: string;
+  id?: string;
+  rw_channel_id: string;
+  channel_name: string;
+  author_name: string;
+  rw_content?: string;
+  content?: string;
+  rw_created_at: string | Date;
+  similarity?: string | number;
+}
 
 export class CopilotRagUseCase {
   private openai: OpenAI | null = null;
@@ -39,7 +52,7 @@ export class CopilotRagUseCase {
         }
 
         // 2. Query contexts using the user context (RLS-enforced)
-        let dbRows: any[] = [];
+        let dbRows: CopilotDbRow[] = [];
         if (embedding) {
           const dbQuery = `
             SELECT s.*, c.rw_name as channel_name, u.rw_full_name as author_name
@@ -49,7 +62,7 @@ export class CopilotRagUseCase {
           `;
           const embeddingStr = `[${embedding.join(',')}]`;
           const res = await client.query(dbQuery, [embeddingStr]);
-          dbRows = res.rows;
+          dbRows = res.rows as CopilotDbRow[];
         } else {
           // Keyword search fallback that respects RLS automatically since it targets table/view
           const fallbackQuery = `
@@ -62,7 +75,7 @@ export class CopilotRagUseCase {
             LIMIT 5
           `;
           const res = await client.query(fallbackQuery, [`%${queryText}%`]);
-          dbRows = res.rows.map(r => ({ ...r, similarity: 0.9 }));
+          dbRows = (res.rows as CopilotDbRow[]).map(r => ({ ...r, similarity: 0.9 }));
         }
 
         contexts = dbRows.map(r => ({
@@ -85,30 +98,18 @@ export class CopilotRagUseCase {
         }
 
         // 3. Query LLM if OpenAI is configured
+        // 3. Construct system prompt from versioned JSON
+        const contextString = contexts
+          .map(c => `[ID: ${c.messageId} | Autor: ${c.authorName} | Canal: ${c.channelName}] Mensaje: "${c.content}"`)
+          .join('\n');
+
+        const systemPrompt = prompts.copilotSystemPrompt
+          .replace('{{userFullName}}', userFullName)
+          .replace('{{userEmail}}', userEmail)
+          .replace('{{userRole}}', userRole)
+          .replace('{{contextString}}', contextString);
+
         if (this.openai) {
-          const contextString = contexts
-            .map(c => `[ID: ${c.messageId} | Autor: ${c.authorName} | Canal: ${c.channelName}] Mensaje: "${c.content}"`)
-            .join('\n');
-
-          const systemPrompt = `
-Eres el Copiloto de Inteligencia Artificial para la plataforma Riwi Co. S.A.S.
-Estás respondiendo a una consulta de un usuario activo con los siguientes detalles:
-- Nombre: ${userFullName}
-- Email: ${userEmail}
-- Rol/Cargo: ${userRole}
-
-Tu tarea es responder a la consulta del usuario basándote EXCLUSIVAMENTE en los mensajes del chat proporcionados a continuación como contexto.
-Debes incluir citas explícitas en formato [ID | Autor | Canal] correspondientes a las fuentes exactas del contexto que estás citando.
-
-Contexto autorizado:
-${contextString}
-
-Instrucciones críticas:
-1. Responde de forma profesional, clara y concisa en base al contexto.
-2. Si el contexto no contiene suficiente información para responder la consulta, o si el acceso a la información relevante no está presente en el contexto, di amablemente que no tienes información autorizada para responder.
-3. Asegúrate de añadir las citas de los mensajes exactos usando el formato literal [ID | Autor | Canal].
-`;
-
           const chatRes = await this.openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
@@ -126,6 +127,21 @@ Instrucciones críticas:
           matchingContexts.forEach(c => {
             answer += `• "${c.content}" de ${c.authorName} en el canal #${c.channelName} [${c.messageId} | ${c.authorName} | ${c.channelName}].\n`;
           });
+        }
+
+        // 5. Register copilot usage (tokens / queries)
+        try {
+          const promptTokens = Math.ceil((systemPrompt.length + queryText.length) / 4);
+          const completionTokens = Math.ceil(answer.length / 4);
+          const totalTokens = promptTokens + completionTokens;
+
+          const usageQuery = `
+            INSERT INTO rw_copilot_usage (rw_user_id, rw_tokens_used, rw_prompt_tokens, rw_completion_tokens)
+            VALUES ($1, $2, $3, $4)
+          `;
+          await client.query(usageQuery, [userId, totalTokens, promptTokens, completionTokens]);
+        } catch (e) {
+          console.warn('Failed to insert copilot usage log:', e);
         }
 
         return {

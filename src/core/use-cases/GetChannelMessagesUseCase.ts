@@ -1,6 +1,17 @@
 import { withUserContext } from '../../infrastructure/database/postgres';
 import { Message } from '../domain/Message';
 
+interface MessageDbRow {
+  rw_id: string;
+  rw_channel_id: string;
+  rw_user_id: string;
+  rw_content: string;
+  rw_is_edited: boolean;
+  rw_is_deleted: boolean;
+  rw_created_at: string | Date;
+  author_name?: string;
+}
+
 export class GetChannelMessagesUseCase {
   async execute(
     userId: string,
@@ -11,7 +22,7 @@ export class GetChannelMessagesUseCase {
   ): Promise<Message[]> {
     return await withUserContext(userId, async (client) => {
       let query: string;
-      let values: any[];
+      let values: unknown[];
 
       if (cursorDate && cursorId) {
         // Query older messages (keyset pagination)
@@ -44,7 +55,7 @@ export class GetChannelMessagesUseCase {
       
       // Keyset fetches in descending order to get the most recent batch.
       // We reverse the array to display them chronologically (ascending).
-      const items = rows.map((m: any) => ({
+      const items = (rows as MessageDbRow[]).map((m) => ({
         rw_id: m.rw_id,
         rw_channel_id: m.rw_channel_id,
         rw_user_id: m.rw_user_id,

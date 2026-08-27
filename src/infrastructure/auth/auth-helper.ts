@@ -20,7 +20,7 @@ export function getAuthUserId(req: Request): DecodedToken | null {
       process.env.JWT_SECRET || 'super_secret_jwt_token_clan_riwi_2026'
     ) as DecodedToken;
     return decoded;
-  } catch (e) {
+  } catch {
     return null;
   }
 }

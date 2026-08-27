@@ -38,7 +38,7 @@ export class UserRepository {
 
   async update(id: string, user: Partial<User>): Promise<User | null> {
     const fields: string[] = [];
-    const values: any[] = [];
+    const values: unknown[] = [];
     let index = 1;
 
     if (user.rw_email !== undefined) {
