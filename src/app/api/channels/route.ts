@@ -39,11 +39,11 @@ export async function GET(req: Request) {
     const channels = await withUserContext(userId, async (client) => {
       const { rows } = await client.query('SELECT * FROM rw_view_user_conversations ORDER BY rw_name ASC');
       return rows.map(r => ({
-        id: r.rw_id,
-        name: r.rw_name,
-        isPrivate: r.rw_is_private,
-        createdBy: r.rw_created_by,
-        createdAt: r.rw_created_at
+        rw_id: r.rw_id,
+        rw_name: r.rw_name,
+        rw_is_private: r.rw_is_private,
+        rw_created_by: r.rw_created_by,
+        rw_created_at: r.rw_created_at
       }));
     });
 
