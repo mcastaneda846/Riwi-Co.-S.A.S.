@@ -1,38 +1,38 @@
-# Decisiones de Diseño y Arquitectura (Bitácora de Decisiones)
+# Registro de Decisiones Técnicas - Riwi Messenger
 
-En este archivo explico de forma sencilla y directa por qué elegimos ciertas herramientas y estrategias de código en este proyecto, y en qué nos basamos para tomarlas.
-
----
-
-## 1. Usar Row Level Security (RLS) en la Base de Datos
-* **¿Qué es?** Es una regla en Postgres que dice: *"Si no eres miembro de este canal, la base de datos no te va a devolver ningún mensaje de él, aunque hagas un SELECT * FROM messages"*.
-* **¿Por qué lo decidimos?** La seguridad tradicional filtra los mensajes en el código del servidor (con un `WHERE channel_id = ...`). Sin embargo, si un programador comete un error u olvida poner ese filtro en un endpoint nuevo o en la búsqueda del Copiloto de IA, los datos se filtrarían. Al poner RLS directamente en la base de datos, la seguridad está blindada en la raíz del sistema.
-* **¿En qué nos basamos?** En el requerimiento no negociable del proyecto: *"Ningún usuario puede leer o consultar datos a los que no tiene acceso"*.
+En este documento se detallan y justifican las decisiones técnicas tomadas durante el desarrollo de la plataforma de mensajería interna Riwi Messenger, detallando el contexto y la justificación de cada elección.
 
 ---
 
-## 2. Paginación Keyset (sin usar OFFSET)
-* **¿Qué es?** En lugar de pedir *"dame los mensajes del 20 al 40"* (`OFFSET 20 LIMIT 20`), pedimos *"dame los 20 mensajes anteriores al mensaje con ID X y fecha Y"*.
-* **¿Por qué lo decidimos?** Usar `OFFSET` en bases de datos grandes hace que el servidor tenga que leer y descartar miles de registros en memoria antes de devolver los que le interesan, volviéndose muy lento. Con Keyset, la base de datos va directo al grano usando los índices, manteniendo el rendimiento súper rápido y evitando saltos de scroll molestos en el chat.
-* **¿En qué nos basamos?** En las mejores prácticas de rendimiento para chats y feeds de mensajería interactiva.
+## 1. Seguridad de Datos con Row Level Security (RLS) en PostgreSQL
+* **Contexto:** Se requiere garantizar de forma estricta que ningún usuario pueda leer o buscar datos de canales privados a los que no pertenece.
+* **Decisión:** Implementar Row Level Security (RLS) directamente en PostgreSQL. Cada transacción se ejecuta bajo una variable de sesión temporal (`app.current_user_id`), validando la membresía del usuario en la base de datos antes de retornar cualquier registro.
+* **Justificación:** Centralizar la seguridad a nivel de base de datos evita fugas accidentales de información por parte del backend o consultas directas de la API de búsqueda vectorial del copiloto, lo que garantiza una protección a nivel de datos nativa y robusta.
 
 ---
 
-## 3. Integración de IA con Cascada Híbrida (Gemini -> OpenAI -> Mock)
-* **¿Qué es?** El copiloto RAG primero intenta consultar a Google Gemini (AI Studio) usando fetch HTTP. Si la API Key no está configurada, falla o no tiene saldo, el sistema salta automáticamente a OpenAI. Si esta última tampoco responde, usa un Mock offline que simula la respuesta.
-* **¿Por qué lo decidimos?** Si dependiéramos de un solo proveedor de IA y este se cae, toda la funcionalidad del Copiloto dejaría de funcionar. Al tener una cascada de fallas (fallback), el sistema es tolerante a errores y siempre responde al usuario.
-* **¿En qué nos basamos?** En el principio de resiliencia y en que el evaluador del proyecto pueda probar la aplicación incluso si no tiene llaves de API configuradas en su máquina local.
+## 2. Paginación Keyset por Cursores (sin OFFSET)
+* **Contexto:** Cargar el historial de mensajes de forma incremental sin comprometer el rendimiento en bases de datos con volumen de datos creciente.
+* **Decisión:** Implementar paginación Keyset usando cursores basados en fecha de creación e identificador único del último mensaje cargado.
+* **Justificación:** A diferencia de la paginación con `OFFSET`, la cual ralentiza las consultas de forma lineal al tener que escanear y descartar registros anteriores en memoria, Keyset salta directamente a la sección indexada requerida, manteniendo un consumo óptimo de recursos y evitando saltos de scroll inesperados en la UI.
 
 ---
 
-## 4. Agrupar la UI en `MainShell.tsx` (Eliminación de Componentes Redundantes)
-* **¿Qué es?** Eliminamos los archivos de componentes pequeños como `MessageList.tsx`, `MessageInput.tsx` y `UserProfileModal.tsx`, centralizando la pantalla principal en `MainShell.tsx`.
-* **¿Por qué lo decidimos?** React a veces sufre de renderizados en cascada y problemas de sincronización de estados cuando se dividen demasiados componentes sin una necesidad real de reutilización. Al consolidar la pantalla de tres zonas en un único archivo de presentación, el flujo de datos entre la selección de canales, el chat de mensajes y el historial del copiloto es directo, limpio y 100% predecible.
-* **¿En qué nos basamos?** En simplificar la estructura eliminando archivos innecesarios para evitar bugs visuales y renders innecesarios.
+## 3. Arquitectura Resiliente del Copiloto RAG (Cascada Gemini -> OpenAI -> Mock)
+* **Contexto:** El copiloto de IA necesita buscar contexto relevante y contestar preguntas del usuario de forma ininterrumpida.
+* **Decisión:** Implementar un patrón de fallback en cascada para la generación del LLM. El sistema intenta primero comunicarse con Google Gemini (usando fetch directo a AI Studio), con fallback automático al SDK de OpenAI, y finalmente un mock local offline si no hay conexión o falta configurar llaves de API.
+* **Justificación:** Esto asegura que la plataforma sea 100% tolerante a fallos de red y límites de cuota, garantizando que el copiloto siempre responda al usuario sin interrumpir la experiencia de uso.
 
 ---
 
-## 5. Reemplazar Emojis por Texto Plano en la Consola y Logs
-* **¿Qué es?** Cambiamos símbolos y emojis (como `🤖`, `🔒`, `✅`, `❌`) por textos planos legibles tipo `[RLS]`, `[PASSED]`, `[ERROR]`.
-* **¿Por qué lo decidimos?** Muchas consolas de servidores Linux viejos, terminales de Docker o entornos de producción no soportan caracteres Unicode especiales (emojis), y terminan mostrando caracteres rotos o signos de interrogación (`?`). El texto plano plano es universalmente compatible.
-* **¿En qué nos basamos?** En garantizar la portabilidad y compatibilidad del sistema al ser ejecutado en cualquier máquina limpia.
+## 4. Consolidación de la Interfaz en `MainShell.tsx`
+* **Contexto:** Minimizar los renderizados innecesarios en React y estructurar la comunicación del estado en tiempo real de forma directa.
+* **Decisión:** Unificar las tres secciones de la UI principal (Sidebar de canales, Panel del chat y Panel del Copiloto) dentro del componente principal `MainShell.tsx` en combinación con React Contexts.
+* **Justificación:** Reducir la fragmentación excesiva del estado local simplifica la sincronización de eventos de envío y actualización en tiempo real, garantizando una UX fluida y predecible sin flujos complejos de props o re-renderizados accidentales.
+
+---
+
+## 5. Salida de Logs y Pruebas en Texto Plano
+* **Contexto:** Evitar problemas de visualización en terminales de desarrollo y servidores de integración.
+* **Decisión:** Reemplazar emojis y caracteres Unicode específicos en consola (`🤖`, `🔒`, `✅`) por marcas de texto estándar (`[RLS]`, `[PASSED]`, `[ERROR]`).
+* **Justificación:** Los caracteres especiales y emojis a menudo no son compatibles con consolas de comandos Unix en servidores de despliegue remotos o Docker logs, provocando caracteres rotos. El formato en texto plano garantiza la máxima portabilidad y legibilidad multiplataforma.

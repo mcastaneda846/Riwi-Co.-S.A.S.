@@ -1,58 +1,102 @@
-# Arquitectura del Proyecto (Explicación Sencilla)
+# Arquitectura del Proyecto - Riwi Messenger
 
-Este proyecto está construido usando **Arquitectura Limpia (Clean Architecture)**. La idea principal es organizar el código en "capas" como si fuera una cebolla, donde el centro (el corazón de la aplicación) no sabe nada sobre las herramientas externas (como la base de datos o el framework Next.js). Esto hace que cambiar una herramienta en el futuro sea muy fácil y que el código sea ordenado y fácil de probar.
+Este proyecto implementa la arquitectura limpia (**Clean Architecture**) para estructurar de manera desacoplada y robusta la lógica de negocio, separándola de las tecnologías de infraestructura y presentación (base de datos, endpoints y vistas).
 
----
+## Estructura de Directorios
 
-## Estructura de Capas
-
-Aquí te explico de forma muy simple qué hace cada carpeta en el proyecto:
+La estructura real de archivos y carpetas del proyecto se organiza de la siguiente manera:
 
 ```
 src/
+├── app/
+│   ├── api/
+│   │   ├── auth/
+│   │   │   ├── login/route.ts
+│   │   │   └── refresh/route.ts
+│   │   ├── channels/route.ts
+│   │   ├── copilot/query/route.ts
+│   │   └── messages/
+│   │       ├── route.ts
+│   │       └── search/route.ts
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx
+├── components/
+│   └── layout/
+│       └── MainShell.tsx
+├── config/
+│   └── prompts.json
+├── context/
+│   ├── AuthContext.tsx
+│   ├── ChatContext.tsx
+│   └── I18nContext.tsx
 ├── core/
-│   ├── domain/         <-- Capa 1: El Corazón (Modelos y Reglas)
-│   └── use-cases/      <-- Capa 2: El Cerebro (Acciones de la aplicación)
-├── infrastructure/     <-- Capa 3: Los Brazos (Base de datos y APIs)
-└── app/                <-- Capa 4: La Piel (Next.js, API Routes y UI)
+│   ├── domain/
+│   │   ├── Channel.ts
+│   │   ├── CopilotContext.ts
+│   │   ├── Message.ts
+│   │   └── User.ts
+│   └── use-cases/
+│       ├── CopilotRagUseCase.ts
+│       ├── GetChannelMessagesUseCase.ts
+│       ├── LoginUseCase.ts
+│       ├── SearchMessagesUseCase.ts
+│       └── SendMessageUseCase.ts
+├── infrastructure/
+│   ├── auth/
+│   │   └── auth-helper.ts
+│   ├── database/
+│   │   └── postgres.ts
+│   └── repositories/
+│       ├── ChannelRepository.ts
+│       ├── MessageRepository.ts
+│       └── UserRepository.ts
+└── scripts/
+    ├── load_seed.ts
+    ├── seed.sql
+    └── test_rls.ts
 ```
 
-### 1. Dominio (`src/core/domain/`)
-* **¿Qué es?** Es la capa más interna. Aquí definimos cómo lucen nuestros datos.
-* **¿Qué contiene?** Las interfaces de TypeScript como `User.ts`, `Message.ts`, `Channel.ts` y `CopilotContext.ts`.
-* **Regla de oro:** No importan nada de Next.js, bases de datos ni librerías externas. Son tipos puros.
+### 1. Capa de Dominio (`src/core/domain/`)
 
-### 2. Casos de Uso (`src/core/use-cases/`)
-* **¿Qué es?** Es la lógica de negocio, es decir, las acciones que nuestra aplicación puede hacer.
-* **¿Qué contiene?**
-  * `LoginUseCase.ts`: Lógica para validar que el usuario y la contraseña coincidan.
-  * `SendMessageUseCase.ts`: Reglas para enviar un mensaje a un canal.
-  * `GetChannelMessagesUseCase.ts`: Recuperar los mensajes de un canal específico.
-  * `CopilotRagUseCase.ts`: Buscar contexto en la base de datos y pasárselo a la IA (Gemini/OpenAI) para responder preguntas.
-* **Explicación:** Si mañana cambiamos Express por Next.js o Postgres por Mongo, esta lógica no cambia en absoluto.
+Representa el núcleo del sistema. Aquí definimos las entidades principales y las reglas de tipado del negocio de forma agnóstica. No tiene dependencias de bases de datos ni de librerías de terceros.
 
-### 3. Infraestructura (`src/infrastructure/`)
-* **¿Qué es?** La conexión con el mundo exterior.
-* **¿Qué contiene?**
-  * `database/postgres.ts`: La configuración del cliente de PostgreSQL y la función `withUserContext` que le avisa a la base de datos qué usuario está haciendo la consulta para que se active el RLS (seguridad).
-  * `repositories/`: Clases que hacen los `SELECT` e `INSERT` reales en las tablas de la base de datos (`UserRepository.ts`, `MessageRepository.ts`, `ChannelRepository.ts`).
+- **Componentes principales:** `User.ts`, `Message.ts`, `Channel.ts`, `CopilotContext.ts`.
 
-### 4. Capa de Aplicación y Presentación (`src/app/` y `/components`)
-* **¿Qué es?** Lo que el usuario ve y los puntos de entrada (rutas API).
-* **¿Qué contiene?**
-  * `/api/`: Rutas HTTP que reciben las peticiones del frontend, extraen el usuario del token JWT y llaman al Caso de Uso correspondiente.
-  * `/components/layout/MainShell.tsx`: La pantalla de chat con sus tres zonas (sidebar de canales, chat de mensajes y panel del copiloto de IA).
-  * `context/`: Proveedores de React (`AuthContext.tsx`, `ChatContext.tsx`, `I18nContext.tsx`) que administran el estado global en el navegador.
+### 2. Capa de Casos de Uso (`src/core/use-cases/`)
+
+Contiene las reglas de negocio de la aplicación y orquesta el flujo de datos. Consume los repositorios mediante abstracciones de persistencia.
+
+- **Componentes principales:**
+  - `LoginUseCase.ts`: Flujo para verificar credenciales de usuarios.
+  - `SendMessageUseCase.ts`: Validación e inserción de mensajes en los canales.
+  - `GetChannelMessagesUseCase.ts`: Recuperación de historial de mensajería.
+  - `CopilotRagUseCase.ts`: Orquestación del proceso RAG de recuperación y generación con inteligencia artificial.
+
+### 3. Capa de Infraestructura (`src/infrastructure/`)
+
+Implementa las interfaces y adaptadores del sistema hacia el exterior, incluyendo la conexión directa con PostgreSQL y la gestión de repositorios de persistencia.
+
+- **Componentes principales:**
+  - `database/postgres.ts`: Configuración del pool de conexiones y el contenedor transaccional `withUserContext` para propagar el contexto RLS.
+  - `repositories/`: Implementaciones directas de bases de datos (`UserRepository.ts`, `MessageRepository.ts`, `ChannelRepository.ts`).
+
+### 4. Capa de Presentación (`src/app/` y `/components`)
+
+Gestiona la interacción del usuario y la exposición de los servicios del servidor.
+
+- **Backend (Next.js API Routes):** Reciben las peticiones HTTP, validan tokens y delegan la ejecución a los casos de uso correspondientes.
+- **Frontend (React Components & Contexts):** Controla el estado global (autenticación y mensajería en tiempo real) y proporciona la interfaz de usuario en `MainShell.tsx`.
 
 ---
 
-## ¿Cómo viaja la información? (Flujo de datos)
+## Flujo de Datos
 
-Cuando escribes un mensaje y le das a "Enviar":
-1. El **Componente React** llama a `sendMessage()` del `ChatContext`.
-2. El context hace una petición `POST` a `/api/messages` con el token JWT.
-3. El archivo de la **API Route** valida el token, saca tu ID de usuario y llama a `SendMessageUseCase.execute()`.
-4. El **Caso de Uso** valida que el mensaje no esté vacío y llama al `MessageRepository` pasando la conexión con la base de datos.
-5. El **Repositorio** ejecuta la consulta SQL segura.
-6. La **Base de Datos (Postgres)** valida las políticas RLS y guarda el mensaje.
-7. Todo regresa en cadena y el mensaje se pinta en tu pantalla.
+El flujo de ejecución de una petición se realiza de la siguiente manera:
+
+1. El usuario interactúa con la interfaz (ej. envía un mensaje).
+2. El componente React invoca el método correspondiente expuesto por el `ChatContext`.
+3. Se realiza una solicitud HTTP a la API correspondiente (`/api/messages`).
+4. El controlador de la API extrae el token JWT, valida la sesión y delega la ejecución al Caso de Uso (`SendMessageUseCase`).
+5. El Caso de Uso ejecuta las validaciones de negocio y se comunica con el Repositorio para la inserción.
+6. El Repositorio ejecuta la consulta dentro de un bloque de transacción RLS y el motor de base de datos realiza la validación y persistencia física.
