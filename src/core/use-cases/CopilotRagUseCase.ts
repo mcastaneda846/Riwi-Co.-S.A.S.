@@ -79,13 +79,13 @@ export class CopilotRagUseCase {
         }
 
         contexts = dbRows.map(r => ({
-          messageId: r.rw_id || r.id,
+          messageId: r.rw_id || r.id || '',
           channelId: r.rw_channel_id,
           channelName: r.channel_name,
           authorName: r.author_name,
-          content: r.rw_content || r.content,
+          content: r.rw_content || r.content || '',
           createdAt: new Date(r.rw_created_at).toISOString(),
-          similarity: parseFloat(r.similarity || '0.9')
+          similarity: typeof r.similarity === 'number' ? r.similarity : parseFloat(r.similarity || '0.9')
         }));
 
         // If no context was found, deny/negative response
